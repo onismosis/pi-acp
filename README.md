@@ -100,6 +100,10 @@ Or without a global install: `{ "command": "npx", "args": ["-y", "@openma/pi-acp
   commands, and custom entry types it owns; `tool_call`s carry `_meta.pi.extension`; extension
   `sendMessage` / `appendEntry` payloads are forwarded whole. Clients adapt third-party
   extensions (pi-subagents, pi-goal, …) on their side; the adapter never interprets them.
+- **Subagent extensions** — the ACP CLI exposes its Pi dependency's CLI as `process.argv[1]`
+  so extensions that relaunch Pi can start subagents. This value is process-wide. Subagents
+  are separate Pi processes; ACP client delegation and additional-directory limits are not
+  inherited by them.
 - **Extension events** — every `pi.events.emit` from any extension (pi-subagents, pi-goal, …) is
   forwarded as `extension_event` metadata with the payload plus two marked inferences from
   naming conventions: a lifecycle `phase` and a `correlationId`. Clients get a work-item

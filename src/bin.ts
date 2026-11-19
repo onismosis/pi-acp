@@ -5,14 +5,35 @@
  * stdout is reserved for the protocol; every diagnostic goes to stderr.
  */
 
-import { realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { logError } from "./log.ts";
+import { logError, logWarn } from "./log.ts";
 import { serve } from "./server.ts";
 import { HELP_TEXT, resolveSettings, SettingsError } from "./settings.ts";
 import { terminalLogin } from "./terminal-login.ts";
 import { PACKAGE_NAME, VERSION } from "./version.ts";
+
+/**
+ * Point `process.argv[1]` at the Pi dependency's CLI. Extensions that relaunch
+ * "the current Pi process" (pstack subagents) spawn `process.execPath` with
+ * `process.argv[1]`, so swapping it here makes those subagents reach the real
+ * pi CLI instead of re-running this ACP server.
+ */
+function usePiEntrypoint(): void {
+  try {
+    const manifest = new URL("../package.json", import.meta.resolve("@earendil-works/pi-coding-agent"));
+    const pkg = JSON.parse(readFileSync(manifest, "utf8")) as { bin?: { pi?: unknown } } | null;
+    if (typeof pkg?.bin?.pi !== "string" || pkg.bin.pi.length === 0)
+      throw new Error("Pi package has no CLI entrypoint");
+    const entry = fileURLToPath(new URL(pkg.bin.pi, manifest));
+    if (!existsSync(entry)) throw new Error(`Pi CLI not found: ${entry}`);
+    // Some extensions spawn process.argv[1] expecting the Pi CLI, not the ACP server.
+    process.argv[1] = entry;
+  } catch (error: unknown) {
+    logWarn(`could not configure Pi subprocess entrypoint: ${String(error)}`);
+  }
+}
 
 export async function main(argv: string[]): Promise<void> {
   if (argv.includes("--version")) {
@@ -66,6 +87,7 @@ export async function main(argv: string[]): Promise<void> {
 try {
   const entry = process.argv[1];
   if (entry !== undefined && realpathSync(resolve(entry)) === realpathSync(fileURLToPath(import.meta.url))) {
+    usePiEntrypoint();
     main(process.argv.slice(2)).catch((error: unknown) => {
       logError(error instanceof Error ? (error.stack ?? error.message) : String(error));
       process.exit(1);

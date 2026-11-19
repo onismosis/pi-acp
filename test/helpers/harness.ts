@@ -121,6 +121,16 @@ export class Harness {
     modelRuntime.registerNativeProvider(faux.provider);
     for (const provider of options.providers ?? []) modelRuntime.registerNativeProvider(provider);
     await modelRuntime.refresh({ allowNetwork: false });
+    // registerNativeProvider starts an unawaited refresh; under parallel tests it
+    // can overwrite this snapshot after the awaited refresh above.
+    const deadline = Date.now() + 5_000;
+    while (!modelRuntime.hasConfiguredAuth(faux.provider.id) && Date.now() < deadline) {
+      await modelRuntime.refresh({ allowNetwork: false });
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    if (!modelRuntime.hasConfiguredAuth(faux.provider.id)) {
+      throw new Error("faux provider auth snapshot did not settle");
+    }
     const harness = new Harness(options, faux, modelRuntime, root);
     harness.connect();
     return harness;
